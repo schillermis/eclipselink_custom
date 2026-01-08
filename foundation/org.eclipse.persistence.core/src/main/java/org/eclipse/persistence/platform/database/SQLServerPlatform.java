@@ -981,49 +981,6 @@ public class SQLServerPlatform extends org.eclipse.persistence.platform.database
     }
 
     @Override
-    public void printSQLSelectStatement(DatabaseCall call, ExpressionSQLPrinter printer, SQLSelectStatement statement) {
-        ReadQuery query = statement.getQuery();
-        if (query == null || !isVersion11OrHigher || !shouldUseRownumFiltering()) {
-            super.printSQLSelectStatement(call, printer, statement);
-            return;
-        }
-        
-        int max = Math.max(0, query.getMaxRows());
-        int first = Math.max(0, query.getFirstResult());
-        
-        if (max == 0 && first == 0) {
-            super.printSQLSelectStatement(call, printer, statement);
-            return;
-        }
-        
-        // OFFSET + FETCH NEXT requires ORDER BY, so add an ordering if there are none
-        // this SQL will satisfy the query parser without actually changing the ordering of the rows
-        List<Expression> orderBy = statement.getOrderByExpressions();
-        if (orderBy.isEmpty()) {
-            orderBy.add(statement.getBuilder().literal("ROW_NUMBER() OVER (ORDER BY (SELECT null))"));
-        }
-        
-        // decide exact syntax to use, depending on whether a limit is specified (could just have an offset)
-        String offsetFetchSql;
-        List<?> offsetFetchArgs;
-        if (max == 0) {
-            offsetFetchSql = "? OFFSET ? ROWS";
-            offsetFetchArgs = Arrays.asList(first);
-        } else {
-            offsetFetchSql = "? OFFSET ? ROWS FETCH NEXT ? ROWS ONLY";
-            offsetFetchArgs = Arrays.asList(first, max - first);
-        }
-        
-        // append to the last ORDER BY clause
-        orderBy.add(orderBy.remove(orderBy.size() - 1).sql(offsetFetchSql, offsetFetchArgs));
-        
-        super.printSQLSelectStatement(call, printer, statement);
-        
-        call.setIgnoreFirstRowSetting(true);
-        call.setIgnoreMaxResultsSetting(true);
-    }
-
-    @Override
     public Object getObjectFromResultSet(ResultSet resultSet, int columnNumber, int type, AbstractSession session)
             throws SQLException {
         if (driverSupportsOffsetDateTime && type == DATETIMEOFFSET_TYPE) {
